@@ -3,10 +3,10 @@ import type { ConversationDTO, MemberDTO, MessageDTO, PublicUser } from "@whatsa
 
 type MemberWithUser = ConversationMember & { user: User };
 
-export function toPublicUser(user: User): PublicUser {
+export function toPublicUser(user: User, options: { includeEmail?: boolean } = {}): PublicUser {
   return {
     id: user.id,
-    email: user.email,
+    ...(options.includeEmail === false ? {} : { email: user.email }),
     displayName: user.displayName,
     lastSeenAt: user.lastSeenAt.toISOString(),
   };

@@ -8,6 +8,8 @@ export type OutboxItem = {
   conversationId: string;
   body: string;
   createdAt: string;
+  attempts?: number;
+  lastAttemptAt?: string;
 };
 
 export class ChatDatabase extends Dexie {
@@ -58,6 +60,22 @@ export function toLocalMessage(message: MessageDTO, status: MessageStatus = "sen
 export async function saveConversation(db: ChatDatabase, conversation: ConversationDTO) {
   await db.conversations.put(conversation);
   await db.members.bulkPut(conversation.members);
+  const keep = new Set(conversation.members.map((member) => member.userId));
+  const existing = await db.members.where("conversationId").equals(conversation.id).toArray();
+  const staleKeys = existing
+    .filter((member) => !keep.has(member.userId))
+    .map((member) => [member.conversationId, member.userId] as [string, string]);
+  if (staleKeys.length) {
+    await db.members.bulkDelete(staleKeys);
+  }
+}
+
+export async function removeLocalConversation(db: ChatDatabase, conversationId: string) {
+  await db.members.where("conversationId").equals(conversationId).delete();
+  await db.messages.where("conversationId").equals(conversationId).delete();
+  await db.outbox.where("conversationId").equals(conversationId).delete();
+  await db.meta.delete(`cursor:${conversationId}`);
+  await db.conversations.delete(conversationId);
 }
 
 export async function upsertIncomingMessage(
@@ -68,8 +86,11 @@ export async function upsertIncomingMessage(
 ) {
   const existing = await db.messages.where("clientMsgId").equals(message.clientMsgId).first();
   const status: MessageStatus =
-    existing?.status === "pending" || existing?.status === "sent" || existing?.status === "read"
-      ? existing.status === "pending"
+    existing?.status === "pending" ||
+    existing?.status === "failed" ||
+    existing?.status === "sent" ||
+    existing?.status === "read"
+      ? existing.status === "pending" || existing.status === "failed"
         ? "sent"
         : existing.status
       : "sent";
@@ -102,7 +123,7 @@ export async function upsertIncomingMessage(
 
 export function ticksFor(message: LocalMessage, members: MemberDTO[], me: string): MessageStatus {
   if (message.senderId !== me) return message.status;
-  if (message.status === "pending") return "pending";
+  if (message.status === "pending" || message.status === "failed") return message.status;
   const others = members.filter((m) => m.userId !== me);
   if (others.length === 0) return "sent";
   const read = others.every((m) => m.lastReadAt && m.lastReadAt >= message.createdAt);

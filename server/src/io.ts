@@ -33,3 +33,11 @@ export function emitConversationUpdated(userIds: string[], conversationId: strin
     server.to(`user:${userId}`).emit("conversation:updated", { conversationId });
   }
 }
+
+export function emitConversationRemoved(userIds: string[], conversationId: string) {
+  const server = getIo();
+  if (!server) return;
+  for (const userId of userIds) {
+    server.to(`user:${userId}`).emit("conversation:removed", { conversationId });
+  }
+}
