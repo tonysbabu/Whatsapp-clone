@@ -41,6 +41,8 @@ export const messageSendSchema = z.object({
   clientMsgId: z.string().uuid(),
 });
 
+export const restSendMessageSchema = messageSendSchema.omit({ conversationId: true });
+
 export const messageDeleteSchema = z.object({
   messageId: z.string().uuid(),
 });

@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversationType {
+  dm
+  group
+}
+
+enum MemberRole {
+  admin
+  member
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  createdConversations Conversation[]       @relation("CreatedBy")
+  memberships          ConversationMember[]
+  messages             Message[]
+
+  @@index([displayName])
+  @@map("users")
+}
+
+model Conversation {
+  id          String           @id @default(uuid())
+  type        ConversationType
+  name        String?
+  createdById String
+  createdAt   DateTime         @default(now())
+  dmPairKey   String?          @unique
+
+  createdBy User                 @relation("CreatedBy", fields: [createdById], references: [id])
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  role           MemberRole @default(member)
+  joinedAt       DateTime   @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String    @id @default(uuid())
+  conversationId String
+  senderId       String
+  body           String
+  clientMsgId    String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id])
+
+  @@unique([senderId, clientMsgId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
