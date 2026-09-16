@@ -8,7 +8,8 @@
     "db:migrate": "npm run prisma:migrate -w server",
     "db:generate": "npm run prisma:generate -w server",
     "build": "npm run build -w server && npm run build -w client",
-    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client"
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client",
+    "test": "npm run test -w server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

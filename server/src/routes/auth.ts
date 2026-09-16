@@ -4,6 +4,7 @@ import { loginSchema, registerSchema } from "@whatsapp/shared";
 import { prisma } from "../prisma.js";
 import { signToken } from "../auth.js";
 import { HttpError } from "../httpError.js";
+import { isUniqueConstraintError } from "../prismaErrors.js";
 import { toPublicUser } from "../serializers.js";
 
 export const authRouter = Router();
@@ -16,14 +17,21 @@ authRouter.post("/register", async (req, res, next) => {
       throw new HttpError(409, "Email already registered");
     }
     const passwordHash = await bcrypt.hash(body.password, 12);
-    const user = await prisma.user.create({
-      data: {
-        email: body.email.toLowerCase(),
-        displayName: body.displayName,
-        passwordHash,
-      },
-    });
-    res.status(201).json({ token: signToken(user.id), user: toPublicUser(user) });
+    try {
+      const user = await prisma.user.create({
+        data: {
+          email: body.email.toLowerCase(),
+          displayName: body.displayName,
+          passwordHash,
+        },
+      });
+      res.status(201).json({ token: signToken(user.id), user: toPublicUser(user) });
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw new HttpError(409, "Email already registered");
+      }
+      throw err;
+    }
   } catch (err) {
     next(err);
   }

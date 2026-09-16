@@ -10,7 +10,13 @@ import type { ConversationDTO } from "@whatsapp/shared";
 import { prisma } from "./prisma.js";
 import { HttpError } from "./httpError.js";
 import { dmPairKey, toConversationDTO, toMessageDTO } from "./serializers.js";
-import { emitConversationUpdated, joinConversationRoom, leaveConversationRoom } from "./io.js";
+import {
+  emitConversationRemoved,
+  emitConversationUpdated,
+  joinConversationRoom,
+  leaveConversationRoom,
+} from "./io.js";
+import { messagePageArgs } from "./messagePaging.js";
 
 const memberInclude = {
   members: { include: { user: true } },
@@ -173,16 +179,16 @@ export async function listMessages(conversationId: string, viewerId: string, que
   if (parsed.after && parsed.before) {
     throw new HttpError(400, "Use either before or after, not both");
   }
+  const { whereExtra, orderBy, reverse } = messagePageArgs(parsed);
   const messages = await prisma.message.findMany({
     where: {
       conversationId,
-      ...(parsed.after ? { createdAt: { gt: new Date(parsed.after) } } : {}),
-      ...(parsed.before ? { createdAt: { lt: new Date(parsed.before) } } : {}),
+      ...whereExtra,
     },
-    orderBy: { createdAt: parsed.after ? "asc" : "desc" },
+    orderBy,
     take: parsed.limit,
   });
-  const ordered = parsed.after ? messages : [...messages].reverse();
+  const ordered = reverse ? [...messages].reverse() : messages;
   return ordered.map(toMessageDTO);
 }
 
@@ -234,11 +240,12 @@ export async function removeMember(conversationId: string, viewerId: string, tar
   }
   const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
   if (!conversation || conversation.type !== "group") throw new HttpError(400, "Not a group");
-  const ids = await memberIds(conversationId);
+  const remainingIds = (await memberIds(conversationId)).filter((id) => id !== targetUserId);
   await prisma.conversationMember.deleteMany({
     where: { conversationId, userId: targetUserId },
   });
   await promoteSuccessorIfNeeded(conversationId);
   leaveConversationRoom([targetUserId], conversationId);
-  emitConversationUpdated(ids, conversationId);
+  emitConversationRemoved([targetUserId], conversationId);
+  emitConversationUpdated(remainingIds, conversationId);
 }

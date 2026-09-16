@@ -131,7 +131,9 @@ function Bubble({
         <span className="meta">
           <time>{formatTime(message.createdAt)}</time>
           {mine && !message.deletedAt && (
-            <span className={`ticks ${status}`}>{status === "read" ? "✓✓" : status === "pending" ? "◌" : "✓"}</span>
+            <span className={`ticks ${status}`}>
+              {status === "read" ? "✓✓" : status === "pending" ? "◌" : status === "failed" ? "!" : "✓"}
+            </span>
           )}
           {mine && !message.deletedAt && message.status !== "pending" && (
             <button type="button" className="linkish" onClick={() => onDelete(message.id)}>

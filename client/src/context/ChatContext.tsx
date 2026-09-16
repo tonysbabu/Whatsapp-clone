@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  ConversationRemovedEvent,
   MessageAck,
   MessageDeletedEvent,
   MessageDTO,
@@ -17,7 +18,7 @@ import type {
   TypingEvent,
 } from "@whatsapp/shared";
 import { useAuth } from "./AuthContext";
-import { closeDb, openDb, upsertIncomingMessage, type ChatDatabase } from "../lib/db";
+import { closeDb, openDb, removeLocalConversation, upsertIncomingMessage, type ChatDatabase } from "../lib/db";
 import { connectSocket, disconnectSocket, getSocket } from "../lib/socket";
 import {
   applyAck,
@@ -27,6 +28,7 @@ import {
   flushOutbox,
   persistConversations,
   refreshConversation,
+  sendQueuedMessage,
 } from "../lib/sync";
 
 type ChatContextValue = {
@@ -144,6 +146,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     };
     const onConversationUpdated = async ({ conversationId }: { conversationId: string }) => {
       const conversation = await refreshConversation(db, conversationId);
+      if (!conversation) return;
       socket.emit("conversation:join", conversation.id);
       await backfillMessages(db, conversation.id);
       if (activeConversationIdRef.current === conversationId) {
@@ -151,6 +154,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const conv = await db.conversations.get(conversationId);
         if (conv) await db.conversations.put({ ...conv, unreadCount: 0 });
       }
+    };
+    const onConversationRemoved = async ({ conversationId }: ConversationRemovedEvent) => {
+      await removeLocalConversation(db, conversationId);
     };
 
     socket.on("connect", onConnect);
@@ -163,9 +169,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     socket.on("presence:update", onPresence);
     socket.on("receipt:read", onReceipt);
     socket.on("conversation:updated", onConversationUpdated);
+    socket.on("conversation:removed", onConversationRemoved);
 
     if (socket.connected) {
       setSocketConnected(true);
+      void syncFromServer();
     }
 
     return () => {
@@ -179,6 +187,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       socket.off("presence:update", onPresence);
       socket.off("receipt:read", onReceipt);
       socket.off("conversation:updated", onConversationUpdated);
+      socket.off("conversation:removed", onConversationRemoved);
     };
   }, [token, user, db]);
 
@@ -192,14 +201,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     async (conversationId: string, body: string) => {
       if (!db || !user) return;
       const local = await enqueueMessage(db, conversationId, body, user.id);
-      const socket = getSocket();
-      if (socket?.connected) {
-        socket.emit("message:send", {
-          conversationId,
-          body: local.body,
-          clientMsgId: local.clientMsgId,
-        });
-      }
+      await sendQueuedMessage(db, conversationId, local.body, local.clientMsgId, getSocket(), navigator.onLine);
     },
     [db, user],
   );

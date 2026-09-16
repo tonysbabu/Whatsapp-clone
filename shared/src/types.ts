@@ -1,10 +1,10 @@
 export type ConversationType = "dm" | "group";
 export type MemberRole = "admin" | "member";
-export type MessageStatus = "pending" | "sent" | "delivered" | "read";
+export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
 
 export type PublicUser = {
   id: string;
-  email: string;
+  email?: string;
   displayName: string;
   lastSeenAt: string;
 };
@@ -73,4 +73,8 @@ export type MessageDeletedEvent = {
   messageId: string;
   conversationId: string;
   deletedAt: string;
+};
+
+export type ConversationRemovedEvent = {
+  conversationId: string;
 };

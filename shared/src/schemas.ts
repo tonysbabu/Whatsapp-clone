@@ -58,6 +58,8 @@ export const receiptReadSchema = z.object({
 export const paginationQuerySchema = z.object({
   before: z.string().datetime().optional(),
   after: z.string().datetime().optional(),
+  beforeId: z.string().uuid().optional(),
+  afterId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 

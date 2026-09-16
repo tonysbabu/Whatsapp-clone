@@ -108,10 +108,12 @@ export const api = {
   removeMember(id: string, userId: string) {
     return request<void>(`/conversations/${id}/members/${userId}`, { method: "DELETE" });
   },
-  messages(id: string, query: { before?: string; after?: string; limit?: number } = {}) {
+  messages(id: string, query: { before?: string; after?: string; beforeId?: string; afterId?: string; limit?: number } = {}) {
     const params = new URLSearchParams();
     if (query.before) params.set("before", query.before);
     if (query.after) params.set("after", query.after);
+    if (query.beforeId) params.set("beforeId", query.beforeId);
+    if (query.afterId) params.set("afterId", query.afterId);
     if (query.limit) params.set("limit", String(query.limit));
     const qs = params.toString();
     return request<{ messages: MessageDTO[] }>(`/conversations/${id}/messages${qs ? `?${qs}` : ""}`);

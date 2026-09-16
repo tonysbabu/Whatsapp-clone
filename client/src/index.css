@@ -137,6 +137,7 @@ a { color: var(--accent); }
 .bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .meta { display: flex; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 11px; margin-top: 4px; }
 .ticks.read { color: #53bdeb; }
+.ticks.failed { color: #ef4444; }
 .linkish { background: none !important; border: 0; padding: 0; color: var(--muted); font-size: 11px; }
 .composer {
   display: flex; gap: 8px; padding: 10px 16px; background: var(--panel); align-items: flex-end;

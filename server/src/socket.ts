@@ -10,7 +10,8 @@ import { verifyToken } from "./auth.js";
 import { getMembership } from "./conversationService.js";
 import { ackMessage, broadcastMessage, persistMessage } from "./messageService.js";
 import { HttpError } from "./httpError.js";
-import { isOnline, onlineUserIds, trackOffline, trackOnline } from "./presence.js";
+import { isOnline, trackOffline, trackOnline } from "./presence.js";
+import { toMessageDTO } from "./serializers.js";
 
 type AuthedSocket = Socket & { userId: string };
 
@@ -18,11 +19,39 @@ async function requireMember(conversationId: string, userId: string) {
   return getMembership(conversationId, userId);
 }
 
+async function contactUserIds(userId: string) {
+  const memberships = await prisma.conversationMember.findMany({
+    where: { userId },
+    select: { conversationId: true },
+  });
+  if (!memberships.length) return [];
+  const others = await prisma.conversationMember.findMany({
+    where: {
+      conversationId: { in: memberships.map((m) => m.conversationId) },
+      userId: { not: userId },
+    },
+    select: { userId: true },
+    distinct: ["userId"],
+  });
+  return others.map((m) => m.userId);
+}
+
+function emitPresenceToUsers(
+  io: Server,
+  userIds: string[],
+  payload: { userId: string; online: boolean; lastSeenAt: string },
+) {
+  for (const id of userIds) {
+    io.to(`user:${id}`).emit("presence:update", payload);
+  }
+}
+
 async function emitPresenceSnapshot(socket: AuthedSocket) {
-  const ids = onlineUserIds().filter((id) => id !== socket.userId);
-  if (!ids.length) return;
+  const contacts = await contactUserIds(socket.userId);
+  const onlineContacts = contacts.filter((id) => isOnline(id));
+  if (!onlineContacts.length) return;
   const users = await prisma.user.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: onlineContacts } },
     select: { id: true, lastSeenAt: true },
   });
   for (const user of users) {
@@ -67,7 +96,7 @@ export function attachSockets(io: Server) {
     const now = new Date();
     await prisma.user.update({ where: { id: userId }, data: { lastSeenAt: now } });
     if (becameOnline) {
-      io.emit("presence:update", {
+      emitPresenceToUsers(io, await contactUserIds(userId), {
         userId,
         online: true,
         lastSeenAt: now.toISOString(),
@@ -81,7 +110,7 @@ export function attachSockets(io: Server) {
         const { message, created } = await persistMessage(userId, data);
         broadcastMessage(message, created);
         ackMessage(userId, message);
-        ack?.({ ok: true, message: { id: message.id } });
+        ack?.({ ok: true, message: toMessageDTO(message) });
       } catch (err) {
         const status = err instanceof HttpError ? err.status : 400;
         ack?.({ error: err instanceof Error ? err.message : "Send failed", status });
@@ -180,7 +209,7 @@ export function attachSockets(io: Server) {
       const lastSeenAt = new Date();
       await prisma.user.update({ where: { id: userId }, data: { lastSeenAt } });
       if (wentOffline) {
-        io.emit("presence:update", {
+        emitPresenceToUsers(io, await contactUserIds(userId), {
           userId,
           online: false,
           lastSeenAt: lastSeenAt.toISOString(),

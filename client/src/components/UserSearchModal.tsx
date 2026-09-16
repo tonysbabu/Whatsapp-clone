@@ -58,7 +58,7 @@ export function UserSearchModal({
         </header>
         <input
           autoFocus
-          placeholder="Search by name or email"
+          placeholder="Search by name"
           value={q}
           onChange={(e) => {
             setError(null);
@@ -71,7 +71,7 @@ export function UserSearchModal({
             <li key={u.id}>
               <button type="button" onClick={() => void openDm(u)}>
                 <strong>{u.displayName}</strong>
-                <span>{u.email}</span>
+                {u.email ? <span>{u.email}</span> : null}
               </button>
             </li>
           ))}
